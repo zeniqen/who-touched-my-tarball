@@ -56,8 +56,10 @@ def test_compare_missing_unexpected(tmp_path):
     assert "more.js" in comp2.unexpected_files
 
 
-def test_environment_unavailable_returns_status(tmp_path):
-    # docker is not available in test env, verifier should return ENVIRONMENT_UNAVAILABLE
+def test_environment_unavailable_returns_status(monkeypatch):
+    # Force "no Docker" so the test is hermetic: CI runners ship Docker, and without
+    # this the verifier would proceed to real network downloads and builds.
+    monkeypatch.setattr("whotouchedmytarball.reproducibility.verifier.docker_available", lambda: False)
     res = verify_build("npm", "debug", "4.4.1")
     assert res.status == VerificationStatus.ENVIRONMENT_UNAVAILABLE
 

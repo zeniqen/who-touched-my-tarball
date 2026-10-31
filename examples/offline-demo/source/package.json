@@ -1,0 +1,15 @@
+{
+  "name": "hardcarry-demo-lib",
+  "version": "1.0.0",
+  "description": "Tiny library used to demonstrate WhoTouchedMyTarball",
+  "main": "index.js",
+  "files": ["index.js"],
+  "scripts": {
+    "test": "node test.js"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zeniqen/who-touched-my-tarball.git"
+  }
+}

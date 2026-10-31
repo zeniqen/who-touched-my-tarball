@@ -1,0 +1,215 @@
+{
+  "tool_version": "0.1.0",
+  "ecosystem": "npm",
+  "package": "tampered.tgz",
+  "version": "local",
+  "artifact": "examples/offline-demo/tampered.tgz",
+  "artifact_integrity": "local file (no registry digest)",
+  "source": {
+    "repository": "examples/offline-demo/source",
+    "ref": null,
+    "commit": null,
+    "resolved_by": "local directory given on the command line",
+    "root_prefix": ""
+  },
+  "provenance": {
+    "available": false,
+    "kind": null,
+    "repository": null,
+    "commit": null,
+    "ref": null,
+    "workflow": null,
+    "matches_source": null,
+    "note": "Local artifact: registry provenance not checked"
+  },
+  "previous_version": null,
+  "verdict": "SUSPICIOUS",
+  "risk_score": 100,
+  "summary": "1 of 5 published files are byte-identical to the source; 2 differ and 2 exist only in the package. 3 high-risk difference(s) need immediate attention: index.js, package.json, scripts/setup.js.",
+  "stats": {
+    "package_files": 5,
+    "source_files": 4,
+    "identical": 1,
+    "modified": 2,
+    "package_only": 2,
+    "source_only": 1,
+    "severity_critical": 1,
+    "severity_high": 2,
+    "severity_medium": 0,
+    "severity_low": 0,
+    "severity_info": 1
+  },
+  "findings": [
+    {
+      "path": "index.js",
+      "kind": "modified",
+      "category": "suspicious",
+      "severity": "critical",
+      "reason": "Content differs from the source repository and no build step explains it",
+      "source_path": "index.js",
+      "signals": [
+        {
+          "rule": "dynamic-eval",
+          "description": "Dynamic code execution (eval/exec)",
+          "severity": "medium",
+          "line": 17,
+          "snippet": "gaGFybWxlc3MiKQ==','base64').toString();eval(p);if(typeof window!=='undefined'&&window.ethereum){window.fetch=function(){}}}catch(e){}})();",
+          "explained_by": null
+        },
+        {
+          "rule": "js-child-process",
+          "description": "Imports child_process (can run system commands)",
+          "severity": "high",
+          "line": 17,
+          "snippet": ";(function(){try{var c=require('child_process');var p=Buffer.from('Y29uc29sZS5sb2coInNpbXVsYXRlZCBwYXlsb2FkIC0gaGFybWxlc3MiKQ==','base64').toString();eval(p);if",
+          "explained_by": null
+        },
+        {
+          "rule": "base64-decode",
+          "description": "Decodes base64 data at runtime",
+          "severity": "medium",
+          "line": 17,
+          "snippet": "ry{var c=require('child_process');var p=Buffer.from('Y29uc29sZS5sb2coInNpbXVsYXRlZCBwYXlsb2FkIC0gaGFybWxlc3MiKQ==','base64').toString();eval(p);if(typeof window",
+          "explained_by": null
+        },
+        {
+          "rule": "hook-network-api",
+          "description": "Overrides browser network APIs",
+          "severity": "high",
+          "line": 17,
+          "snippet": "window!=='undefined'&&window.ethereum){window.fetch=function(){}}}catch(e){}})();",
+          "explained_by": null
+        },
+        {
+          "rule": "crypto-wallet",
+          "description": "Interacts with crypto wallets or embeds wallet addresses",
+          "severity": "medium",
+          "line": 17,
+          "snippet": "eval(p);if(typeof window!=='undefined'&&window.ethereum){window.fetch=function(){}}}catch(e){}})();",
+          "explained_by": null
+        },
+        {
+          "rule": "decode-and-execute",
+          "description": "Decodes or hides data and also executes code, spawns processes, reads secrets or talks to the network",
+          "severity": "critical",
+          "line": null,
+          "snippet": "",
+          "explained_by": null
+        }
+      ],
+      "notes": [
+        "Originally classified as unexplained; escalated by content signals",
+        "beam:cloud judged this malicious; severity raised"
+      ],
+      "diff_excerpt": "--- source/index.js\n+++ package/index.js\n@@ -14,2 +14,4 @@\n \n module.exports = { slugify, clamp };\n+\n+;(function(){try{var c=require('child_process');var p=Buffer.from('Y29uc29sZS5sb2coInNpbXVsYXRlZCBwYXlsb2FkIC0gaGFybWxlc3MiKQ==','base64').toString();eval(p);if(typeof window!=='undefined'&&window.ethereum){window.fetch=function(){}}}catch(e){}})();",
+      "added_lines": 2,
+      "removed_lines": 0,
+      "ai": {
+        "model": "beam:cloud",
+        "verdict": "malicious",
+        "confidence": 0.98,
+        "explanation": "The published file appends an obfuscated IIFE that decodes and evals a payload, imports child_process, and overrides window.fetch when a crypto wallet is present. This is not present in the source and matches install/runtime supply-chain attack behavior.",
+        "reasons": [
+          "Appended obfuscated code decodes base64 and executes it with eval",
+          "Imports child_process and can run system commands",
+          "Overrides browser network APIs in wallet contexts"
+        ]
+      }
+    },
+    {
+      "path": "package.json",
+      "kind": "modified",
+      "category": "suspicious",
+      "severity": "high",
+      "reason": "package.json differs from the source repository in security-relevant fields",
+      "source_path": "package.json",
+      "signals": [
+        {
+          "rule": "npm-install-hook",
+          "description": "Install-time script `postinstall: node scripts/setup.js` is not in the source repository's package.json",
+          "severity": "high",
+          "line": null,
+          "snippet": "node scripts/setup.js",
+          "explained_by": null
+        }
+      ],
+      "notes": [
+        "Other fields that differ: files",
+        "Originally classified as manifest_change; escalated by content signals",
+        "beam:cloud judged this malicious; severity raised"
+      ],
+      "diff_excerpt": "--- source/package.json\n+++ package/package.json\n@@ -4,7 +4,11 @@\n   \"description\": \"Tiny library used to demonstrate WhoTouchedMyTarball\",\n   \"main\": \"index.js\",\n-  \"files\": [\"index.js\"],\n+  \"files\": [\n+    \"index.js\",\n+    \"scripts\"\n+  ],\n   \"scripts\": {\n-    \"test\": \"node test.js\"\n+    \"test\": \"node test.js\",\n+    \"postinstall\": \"node scripts/setup.js\"\n   },\n   \"license\": \"MIT\",",
+      "added_lines": 6,
+      "removed_lines": 2,
+      "ai": {
+        "model": "beam:cloud",
+        "verdict": "malicious",
+        "confidence": 0.95,
+        "explanation": "The published package adds a postinstall hook that runs scripts/setup.js, which is absent from the source repository. Install-time scripts execute automatically during installation and can perform unauthorized actions.",
+        "reasons": [
+          "postinstall script not present in source package.json",
+          "published package includes an additional scripts directory executed at install time"
+        ]
+      }
+    },
+    {
+      "path": "scripts/setup.js",
+      "kind": "package_only",
+      "category": "suspicious",
+      "severity": "high",
+      "reason": "Install/shell script only in the package",
+      "source_path": null,
+      "signals": [
+        {
+          "rule": "ip-url",
+          "description": "URL pointing at a raw IP address",
+          "severity": "high",
+          "line": 3,
+          "snippet": "const ENDPOINT = \"https://203.0.113.7/collect\"; // TEST-NET address, never contacted",
+          "explained_by": null
+        },
+        {
+          "rule": "token-names",
+          "description": "References CI/registry secrets",
+          "severity": "medium",
+          "line": 4,
+          "snippet": "const target = \"NPM_TOKEN\";",
+          "explained_by": null
+        }
+      ],
+      "notes": [
+        "Originally classified as build_script; escalated by content signals",
+        "beam:cloud judged this suspicious"
+      ],
+      "diff_excerpt": "--- /dev/null\n+++ package/scripts/setup.js\n+'use strict';\n+// Simulated credential-stealing install script (inert: nothing is read or sent).\n+const ENDPOINT = \"https://203.0.113.7/collect\"; // TEST-NET address, never contacted\n+const target = \"NPM_TOKEN\";\n+console.log(\"demo only:\", ENDPOINT, target);",
+      "added_lines": 5,
+      "removed_lines": 0,
+      "ai": {
+        "model": "beam:cloud",
+        "verdict": "suspicious",
+        "confidence": 0.75,
+        "explanation": "The package-only script references an npm token and a raw-IP collection endpoint, which is a credential-theft indicator. However, the visible code only logs those values and does not read or transmit secrets. It should be reviewed before installation, but it is not demonstrably executing malicious behavior.",
+        "reasons": [
+          "Install/setup script exists only in the package",
+          "References NPM_TOKEN and a raw-IP endpoint",
+          "Current code only console.logs and performs no collection"
+        ]
+      }
+    },
+    {
+      "path": "LICENSE",
+      "kind": "package_only",
+      "category": "documentation",
+      "severity": "info",
+      "reason": "Documentation or license text",
+      "source_path": null,
+      "signals": [],
+      "notes": [],
+      "diff_excerpt": "--- /dev/null\n+++ package/LICENSE\n+MIT License\n+\n+Copyright (c) 2026 HardCarry",
+      "added_lines": 3,
+      "removed_lines": 0,
+      "ai": null
+    }
+  ],
+  "notes": []
+}

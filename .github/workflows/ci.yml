@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit and end-to-end tests (offline)
+        run: pytest -q
+
+      - name: Validate the offline demo
+        run: |
+          wtmt diff examples/offline-demo/clean.tgz examples/offline-demo/source --no-ai --quiet
+          set +e
+          wtmt diff examples/offline-demo/tampered.tgz examples/offline-demo/source --no-ai --quiet
+          code=$?
+          set -e
+          if [ "$code" -ne 2 ]; then
+            echo "Expected the tampered demo to be flagged SUSPICIOUS (exit 2), got $code"
+            exit 1
+          fi

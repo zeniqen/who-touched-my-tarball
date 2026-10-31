@@ -1,0 +1,73 @@
+{
+  "tool_version": "0.1.0",
+  "ecosystem": "npm",
+  "package": "clean.tgz",
+  "version": "local",
+  "artifact": "examples/offline-demo/clean.tgz",
+  "artifact_integrity": "local file (no registry digest)",
+  "source": {
+    "repository": "examples/offline-demo/source",
+    "ref": null,
+    "commit": null,
+    "resolved_by": "local directory given on the command line",
+    "root_prefix": ""
+  },
+  "provenance": {
+    "available": false,
+    "kind": null,
+    "repository": null,
+    "commit": null,
+    "ref": null,
+    "workflow": null,
+    "matches_source": null,
+    "note": "Local artifact: registry provenance not checked"
+  },
+  "previous_version": null,
+  "verdict": "CLEAN",
+  "risk_score": 0,
+  "summary": "2 of 4 published files are byte-identical to the source; 1 differ and 1 exist only in the package. Every difference is explained by normal packaging or build steps.",
+  "stats": {
+    "package_files": 4,
+    "source_files": 4,
+    "identical": 2,
+    "modified": 1,
+    "package_only": 1,
+    "source_only": 1,
+    "severity_critical": 0,
+    "severity_high": 0,
+    "severity_medium": 0,
+    "severity_low": 0,
+    "severity_info": 2
+  },
+  "findings": [
+    {
+      "path": "LICENSE",
+      "kind": "package_only",
+      "category": "documentation",
+      "severity": "info",
+      "reason": "Documentation or license text",
+      "source_path": null,
+      "signals": [],
+      "notes": [],
+      "diff_excerpt": "--- /dev/null\n+++ package/LICENSE\n+MIT License\n+\n+Copyright (c) 2026 HardCarry",
+      "added_lines": 3,
+      "removed_lines": 0,
+      "ai": null
+    },
+    {
+      "path": "package.json",
+      "kind": "modified",
+      "category": "manifest_change",
+      "severity": "info",
+      "reason": "package.json differs only in non-executable metadata (version, publish fields)",
+      "source_path": "package.json",
+      "signals": [],
+      "notes": [],
+      "diff_excerpt": "--- source/package.json\n+++ package/package.json\n@@ -4,5 +4,7 @@\n   \"description\": \"Tiny library used to demonstrate WhoTouchedMyTarball\",\n   \"main\": \"index.js\",\n-  \"files\": [\"index.js\"],\n+  \"files\": [\n+    \"index.js\"\n+  ],\n   \"scripts\": {\n     \"test\": \"node test.js\"",
+      "added_lines": 3,
+      "removed_lines": 1,
+      "ai": null
+    }
+  ],
+  "notes": []
+}

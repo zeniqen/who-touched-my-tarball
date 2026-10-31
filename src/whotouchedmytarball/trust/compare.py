@@ -56,6 +56,10 @@ def detect_changes(baseline: TrustBaseline | None, observation: IdentityObservat
             cat = "repository_url_changed"
         changes.append(_change("repository_url", prev.repository_url, curr.repository_url, sev, cat,
                                "Repository identity changed.", {**evidence_base}))
+    elif prev.repository_url and not curr.repository_url:
+        changes.append(_change("repository_url", prev.repository_url, None, "high", "repository_removed",
+                               "This release no longer links to the repository earlier releases came from.",
+                               {**evidence_base}))
 
     # Source commit
     if prev.source_commit and curr.source_commit and prev.source_commit != curr.source_commit:

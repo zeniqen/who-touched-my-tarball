@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
+import tempfile
 from pathlib import Path
 
 from ..ecosystems import RegistryError, get_ecosystem, make_client
@@ -19,15 +22,48 @@ from .models import (
     SignatureStatus,
 )
 from .sigstore import SIGSTORE_AVAILABLE, verify_bundle
-from .slsa import extract_slsa, find_source_repo, is_slsa
+from .slsa import extract_slsa, find_source_commit, find_source_repo, is_slsa
 
 
-def _hash_file(path: Path) -> str:
-    h = hashlib.sha256()
+def _hash_file(path: Path) -> dict[str, str]:
+    hashes = {"sha256": hashlib.sha256(), "sha512": hashlib.sha512()}
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+            for h in hashes.values():
+                h.update(chunk)
+    return {algo: h.hexdigest() for algo, h in hashes.items()}
+
+
+def _decode_dsse(att: dict) -> dict | None:
+    envelope = (att.get("bundle") or {}).get("dsseEnvelope") or att.get("dsseEnvelope") or {}
+    try:
+        statement = json.loads(base64.b64decode(envelope.get("payload", ""), validate=True))
+    except (ValueError, TypeError):
+        return None
+    return statement if isinstance(statement, dict) else None
+
+
+def _select_statement(data):
+    """Find the in-toto statement to verify.
+
+    npm lists several attestations (a publish attestation and SLSA provenance), each as a Sigstore
+    bundle whose statement is base64 inside a DSSE envelope. Prefer the SLSA one.
+    """
+    if not isinstance(data, dict):
+        return data
+    direct = data.get("statement") or data.get("attestation")
+    if direct is not None:
+        return direct
+    atts = data.get("attestations")
+    if isinstance(atts, list) and atts:
+        candidates = [a for a in atts if isinstance(a, dict)]
+        candidates.sort(key=lambda a: "slsa.dev/provenance" not in str(a.get("predicateType", "")))
+        for att in candidates:
+            statement = att.get("statement") or _decode_dsse(att)
+            if statement is not None:
+                return statement
+        return atts[0]
+    return data
 
 
 def verify_provenance(
@@ -54,13 +90,15 @@ def verify_provenance(
             release = eco.resolve(client, package, version, "auto")
             result.package_version = release.version
             # download to compute digest if not provided
+            digests: dict[str, str] = {"sha256": artifact_digest} if artifact_digest else {}
             if artifact_digest is None:
                 try:
-                    artifact_path, _ = eco.download(client, release, Path("/tmp") / "wtmt-pv")
-                    artifact_digest = _hash_file(artifact_path)
+                    with tempfile.TemporaryDirectory(prefix="wtmt-pv-") as tmp:
+                        artifact_path, _ = eco.download(client, release, Path(tmp) / "artifact")
+                        digests = _hash_file(artifact_path)
                 except Exception:
-                    artifact_digest = None
-            result.actual_artifact_digest = artifact_digest
+                    digests = {}
+            result.actual_artifact_digest = digests.get("sha256")
 
             if ecosystem_name == "npm":
                 progress("Retrieving npm attestations")
@@ -85,16 +123,7 @@ def verify_provenance(
             result.attestation_found = True
             result.raw_attestation = data
 
-            # Locate statement object.
-            statement = None
-            if isinstance(data, dict):
-                statement = data.get("statement") or data.get("attestation")
-                if statement is None and "attestations" in data:
-                    atts = data["attestations"]
-                    if isinstance(atts, list) and atts:
-                        statement = atts[0].get("statement") if isinstance(atts[0], dict) else atts[0]
-            if statement is None:
-                statement = data
+            statement = _select_statement(data)
 
             # Validate structure.
             errs = verify_attestation_structure(statement)
@@ -112,8 +141,8 @@ def verify_provenance(
                     dims.attestation = AttestationStatus.INVALID
             if parsed:
                 # subject digest binding
-                if artifact_digest:
-                    if match_subject_digest(parsed, artifact_digest):
+                if digests:
+                    if match_subject_digest(parsed, digests):
                         dims.artifact_binding = BindingStatus.MATCH
                     else:
                         dims.artifact_binding = BindingStatus.MISMATCH
@@ -124,7 +153,7 @@ def verify_provenance(
                 if is_slsa(parsed):
                     slsa_info = extract_slsa(parsed)
                     result.repository_url = find_source_repo(slsa_info, None)
-                    result.source_commit = None
+                    result.source_commit = find_source_commit(slsa_info)
                     result.build_workflow = slsa_info.get("build_type")
                     result.builder_identity = slsa_info.get("builder_id")
                     # attempt commit from materials? Keep best-effort empty.

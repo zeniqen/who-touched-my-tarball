@@ -54,6 +54,8 @@ RULES: list[Rule] = [
        Severity.HIGH, "Hidden import of a sensitive module via __import__", "exec"),
     _r("py-marshal", r"\bmarshal\.loads\s*\(", Severity.HIGH, "Loads marshalled bytecode", "exec"),
     _r("shell-eval", r"\beval\s+[\"']?\$", Severity.MEDIUM, "Shell eval of a variable", "exec"),
+    _r("js-module-compile", r"\bnew\s+module\.constructor\b|\._compile\s*\(", Severity.HIGH,
+       "Compiles a string into a module at runtime (the event-stream/flatmap-stream loader)", "exec"),
     # Process execution
     _r("js-child-process", r"(require\(\s*['\"](node:)?child_process['\"]\s*\)|from\s+['\"](node:)?child_process['\"])",
        Severity.HIGH, "Imports child_process (can run system commands)", "process"),
@@ -82,6 +84,11 @@ RULES: list[Rule] = [
     # Decoding / obfuscation
     _r("base64-decode", r"(Buffer\.from\([^)]*['\"]base64['\"]|\batob\s*\(|b64decode\s*\(|base64\s+(-d|--decode))",
        Severity.MEDIUM, "Decodes base64 data at runtime", "decode"),
+    _r("hex-decode", r"(Buffer\.from\([^)]*['\"]hex['\"]|bytes\.fromhex\s*\(|unhexlify\s*\()",
+       Severity.LOW, "Decodes hex-encoded data at runtime", "decode"),
+    _r("decipher", r"\bcreateDecipher(iv)?\s*\(", Severity.MEDIUM, "Decrypts embedded data at runtime", "decode"),
+    _r("pipe-decompress", r"\|\s*(xz|unxz|lzma|gunzip|gzip|bzip2|zstd|\$\S+)\s+-d\b", Severity.LOW,
+       "Pipes data through a decompressor (or a decompressor chosen at run time)", "decode"),
     _r("compressed-payload", r"\b(zlib\.decompress|gzip\.decompress|lzma\.decompress|inflateSync|gunzipSync)\s*\(",
        Severity.LOW, "Decompresses embedded data", "decode"),
     _r("char-code", r"String\.fromCharCode\s*\(", Severity.LOW, "Builds strings from character codes", "decode"),
@@ -91,6 +98,14 @@ RULES: list[Rule] = [
        r"\brequire\s*\(\s*\[[^\]]*\]\s*\.\s*join\s*\(|\bmodule\.constructor\._load\s*\(|"
        r"\bprocess\.mainModule\.require\s*\(", Severity.MEDIUM,
        "Loads a module in a way that hides its name (string concatenation, join or internal loaders)", "obfuscation"),
+    _r("bidi-control", "[\u202a-\u202e\u2066-\u2069]", Severity.HIGH,
+       "Unicode bidirectional control character: code may read differently than it runs (Trojan Source)",
+       "obfuscation"),
+    _r("binary-grep-srcdir", r"\bgrep\s+-[A-Za-z]*a[A-Za-z]*\b[^\n]*\$\{?srcdir", Severity.MEDIUM,
+       "Build script searches the source tree's binary files for a marker (the XZ backdoor loader)",
+       "obfuscation"),
+    _r("tr-substitution", r"\btr\s+[\"'][^\"']*\\t[^\"']*[\"']\s+[\"']", Severity.MEDIUM,
+       "Character-substitution cipher with tr, used to un-scramble hidden payloads", "obfuscation"),
     _r("js-obfuscator",r"\b_0x[0-9a-f]{4,6}\b", Severity.HIGH,
        "Identifiers typical of javascript-obfuscator output", "obfuscation"),
     # Secrets and environment

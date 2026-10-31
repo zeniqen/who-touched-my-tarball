@@ -48,8 +48,20 @@ def extract_slsa(statement: dict) -> dict:
 
 
 def find_source_repo(slsa: dict, source_repo_hint: str | None = None) -> str | None:
+    workflow = (slsa.get("build_parameters") or {}).get("workflow")
+    if isinstance(workflow, dict) and isinstance(workflow.get("repository"), str):
+        return workflow["repository"]
     for m in slsa.get("materials", []):
         uri = m.get("uri")
         if isinstance(uri, str) and ("github.com" in uri or "gitlab.com" in uri or uri.startswith("git+")):
-            return uri
+            return uri.split("@", 1)[0]  # git+https://github.com/o/r@refs/heads/main -> the repository
     return source_repo_hint
+
+
+def find_source_commit(slsa: dict) -> str | None:
+    for m in slsa.get("materials", []):
+        digest = m.get("digest") or {}
+        commit = digest.get("gitCommit") or digest.get("sha1")
+        if isinstance(commit, str) and commit:
+            return commit
+    return None

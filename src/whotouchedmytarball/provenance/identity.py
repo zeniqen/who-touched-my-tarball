@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+MIN_COMMIT_PREFIX = 7
+
 
 def normalize_repo_url(url: str | None) -> str | None:
     if not url:
@@ -26,7 +28,12 @@ def repo_match(expected: str | None, attested: str | None) -> bool:
 def commit_match(expected: str | None, attested: str | None) -> bool:
     if not expected or not attested:
         return False
-    return expected.lower() == attested.lower() or expected.lower().startswith(attested.lower()) or attested.lower().startswith(expected.lower())
+    e, a = expected.lower(), attested.lower()
+    if e == a:
+        return True
+    # Abbreviated commits are accepted, but a prefix shorter than git's default (7) matches far too much.
+    shorter, longer = sorted((e, a), key=len)
+    return len(shorter) >= MIN_COMMIT_PREFIX and longer.startswith(shorter)
 
 
 def evaluate_trust(*, expected_repo: str | None, expected_commit: str | None,

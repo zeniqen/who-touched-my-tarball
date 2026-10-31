@@ -14,6 +14,8 @@ from .models import (
 )
 from .sigstore import SIGSTORE_AVAILABLE
 
+MISMATCHES = (TrustStatus.IDENTITY_MISMATCH, TrustStatus.SOURCE_REVISION_MISMATCH, TrustStatus.WORKFLOW_MISMATCH)
+
 
 def finalize_status(result: ProvenanceResult) -> VerificationStatus:
     d = result.dimensions
@@ -23,10 +25,14 @@ def finalize_status(result: ProvenanceResult) -> VerificationStatus:
         return VerificationStatus.RETRIEVAL_ERROR
     if d.retrieval == RetrievalStatus.NOT_FOUND:
         return VerificationStatus.MISSING_PROVENANCE
-    if d.signature == SignatureStatus.NOT_CHECKED and not SIGSTORE_AVAILABLE:
-        return VerificationStatus.VERIFICATION_UNAVAILABLE
+    # Negative evidence wins over "could not check the signature": an attestation for other bytes
+    # or another repository is a finding whether or not sigstore is installed.
     if d.artifact_binding == BindingStatus.MISMATCH:
         return VerificationStatus.DIGEST_MISMATCH
+    if d.identity_trust in MISMATCHES:
+        return VerificationStatus.IDENTITY_MISMATCH
+    if d.signature == SignatureStatus.NOT_CHECKED and not SIGSTORE_AVAILABLE:
+        return VerificationStatus.VERIFICATION_UNAVAILABLE
     if d.signature == SignatureStatus.INVALID:
         return VerificationStatus.INVALID_SIGNATURE
     if d.certificate == CertificateStatus.INVALID:
@@ -35,9 +41,6 @@ def finalize_status(result: ProvenanceResult) -> VerificationStatus:
         return VerificationStatus.INVALID_ATTESTATION
     if d.attestation == AttestationStatus.INCOMPLETE:
         return VerificationStatus.INCOMPLETE_PROVENANCE
-    if d.identity_trust in (TrustStatus.IDENTITY_MISMATCH, TrustStatus.SOURCE_REVISION_MISMATCH,
-                            TrustStatus.WORKFLOW_MISMATCH):
-        return VerificationStatus.IDENTITY_MISMATCH
     if (d.signature == SignatureStatus.VALID and d.certificate == CertificateStatus.VALID
             and d.artifact_binding == BindingStatus.MATCH
             and d.attestation in (AttestationStatus.VALID, AttestationStatus.NOT_CHECKED)):

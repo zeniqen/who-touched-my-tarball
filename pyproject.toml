@@ -37,3 +37,6 @@ ignore = ["B008", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Live tests hit npm, PyPI and GitHub. They are skipped by default (and in CI); run them with `pytest -m live`.
+addopts = "-m 'not live'"
+markers = ["live: needs network access to real registries (opt-in: pytest -m live)"]

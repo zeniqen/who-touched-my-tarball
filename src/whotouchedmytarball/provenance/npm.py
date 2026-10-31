@@ -35,6 +35,8 @@ def retrieve_attestations(client: httpx.Client, name: str, version: str) -> tupl
     dist = meta.get("dist") or {}
     if isinstance(dist, dict):
         attestations_url = dist.get("attestations") or dist.get("provenance")
+        if isinstance(attestations_url, dict):  # registry.npmjs.org: {"url": ..., "provenance": {...}}
+            attestations_url = attestations_url.get("url")
     if attestations_url is None:
         attestations_url = meta.get("attestations")
     if isinstance(attestations_url, str) and attestations_url:

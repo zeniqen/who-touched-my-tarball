@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -138,6 +139,17 @@ def list_watched(conn: sqlite3.Connection) -> list[tuple]:
     ).fetchall()
 
 
+def _safe_component(value: str) -> str:
+    """Make registry-supplied text (package names, versions) safe to use in a single file name."""
+    cleaned = re.sub(r"[^A-Za-z0-9._+-]", "_", value.replace("/", "__").replace("@", ""))
+    return re.sub(r"\.{2,}", "_", cleaned).strip(".") or "_"
+
+
+def report_stem(out_dir: Path, ecosystem: str, name: str, version: str) -> Path:
+    """Report path without extension; always directly inside ``out_dir`` and unique per version."""
+    return out_dir / f"{_safe_component(ecosystem)}-{_safe_component(name)}-{_safe_component(version)}"
+
+
 def run_once(conn: sqlite3.Connection, out_dir: Path, opts: AnalyzeOptions | None = None) -> list[WatchResult]:
     out_dir.mkdir(parents=True, exist_ok=True)
     results: list[WatchResult] = []
@@ -165,10 +177,10 @@ def run_once(conn: sqlite3.Connection, out_dir: Path, opts: AnalyzeOptions | Non
         except (RegistryError, OSError, ValueError) as exc:
             results.append(WatchResult(eco_name, name, version, "ERROR", error=str(exc)))
             continue
-        safe = name.replace("/", "__").replace("@", "")
-        stem = out_dir / f"{eco_name}-{safe}-{version}"
-        stem.with_suffix(".json").write_text(report.model_dump_json(indent=2))
-        stem.with_suffix(".md").write_text(to_markdown(report))
+        stem = report_stem(out_dir, eco_name, name, version)
+        json_path, md_path = stem.parent / f"{stem.name}.json", stem.parent / f"{stem.name}.md"
+        json_path.write_text(report.model_dump_json(indent=2))
+        md_path.write_text(to_markdown(report))
 
         # Trust continuity observation and change detection.
         try:
@@ -263,7 +275,7 @@ def run_once(conn: sqlite3.Connection, out_dir: Path, opts: AnalyzeOptions | Non
             "UPDATE watched SET last_version = ?, last_verdict = ?, last_checked = ? WHERE ecosystem = ? AND name = ?",
             (version, report.verdict, now, eco_name, name),
         )
-        results.append(WatchResult(eco_name, name, version, report.verdict, report_path=stem.with_suffix(".md")))
+        results.append(WatchResult(eco_name, name, version, report.verdict, report_path=md_path))
     conn.commit()
     return results
 

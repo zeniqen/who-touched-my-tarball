@@ -9,15 +9,18 @@ from pathlib import Path
 
 from ..analyzer import _resolve_source
 from ..archive import extract
-from ..ecosystems import RegistryError, get_ecosystem, make_client
-from ..sources import SourceCheckout
+from ..ecosystems import get_ecosystem, make_client
 from .builder import DockerBuildExecutor
+from .compare import classify_status, compare_artifact_trees
 from .environment import docker_available
 from .models import (
-    BuildEnvironmentInfo, BuildLimits, BuildRecipe, NetworkPolicy, VerificationResult, VerificationStatus,
+    BuildEnvironmentInfo,
+    BuildLimits,
+    NetworkPolicy,
+    VerificationResult,
+    VerificationStatus,
 )
 from .recipe import discover_recipe, has_sufficient_information, is_supported_build_system
-from .compare import compare_artifact_trees, classify_status
 
 
 def _now() -> str:

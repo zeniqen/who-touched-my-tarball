@@ -5,25 +5,20 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import httpx
-
-from ..ecosystems import get_ecosystem, make_client, RegistryError
+from ..ecosystems import RegistryError, get_ecosystem, make_client
+from . import npm as npm_mod
+from . import pypi as pypi_mod
 from .base import finalize_status, verify_attestation_structure
+from .identity import evaluate_trust
+from .intoto import match_subject_digest
 from .models import (
     AttestationStatus,
     BindingStatus,
     CertificateStatus,
-    ProvenanceDimensions,
     ProvenanceResult,
-    RetrievalStatus,
     SignatureStatus,
 )
-from .identity import evaluate_trust, normalize_repo_url
-from .intoto import match_subject_digest, parse_statement
 from .sigstore import SIGSTORE_AVAILABLE, verify_bundle
-from . import npm as npm_mod
-from . import pypi as pypi_mod
-
 from .slsa import extract_slsa, find_source_repo, is_slsa
 
 

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from .models import TrustBaseline, IdentityObservation
+from .models import IdentityObservation, TrustBaseline
 
 
 def normalize_repo_url(url: str | None) -> str | None:

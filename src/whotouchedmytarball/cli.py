@@ -10,14 +10,14 @@ from rich.console import Console
 
 from . import __version__
 from .analyzer import AnalyzeOptions, analyze_local, analyze_release
-from .reproducibility.verifier import verify_build
-from .reproducibility.models import NetworkPolicy
-from .provenance.verifier import verify_provenance
 from .archive import UnsafeArchiveError, UnsupportedArchiveError
 from .ecosystems import RegistryError, get_ecosystem
 from .llm import DEFAULT_FALLBACK, DEFAULT_MODEL, OllamaClient
 from .models import Report
+from .provenance.verifier import verify_provenance
 from .report import render_terminal, to_markdown
+from .reproducibility.models import NetworkPolicy
+from .reproducibility.verifier import verify_build
 
 app = typer.Typer(
     help="WhoTouchedMyTarball: check whether a published npm/PyPI package matches its source code.",
@@ -215,7 +215,7 @@ def verify_build_cmd(
         np = NetworkPolicy(network_policy)
     except ValueError:
         err.print(f"[red]error:[/red] invalid network policy: {network_policy}")
-        raise typer.Exit(3)
+        raise typer.Exit(3) from None
 
     try:
         result = verify_build(
@@ -227,7 +227,6 @@ def verify_build_cmd(
         err.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(3) from exc
 
-    from .reproducibility.models import VerificationResult
 
     data = result.as_dict()
     if output:
@@ -368,7 +367,7 @@ def trust_baseline(ecosystem: str, package: str) -> None:
 
 @trust_app.command("approve")
 def trust_approve(ecosystem: str, package: str, change_id: int = typer.Option(..., "--change-id")) -> None:
-    from .monitor import connect, approve_change
+    from .monitor import approve_change, connect
     conn = connect()
     approve_change(conn, get_ecosystem(ecosystem).name, package, change_id)
     console.print(f"Approved change {change_id}")
@@ -384,7 +383,7 @@ def trust_reject(ecosystem: str, package: str, change_id: int = typer.Option(...
 
 @trust_app.command("acknowledge")
 def trust_acknowledge(ecosystem: str, package: str, change_id: int = typer.Option(..., "--change-id")) -> None:
-    from .monitor import connect, acknowledge_change
+    from .monitor import acknowledge_change, connect
     conn = connect()
     acknowledge_change(conn, get_ecosystem(ecosystem).name, package, change_id)
     console.print(f"Acknowledged change {change_id}")
@@ -395,12 +394,14 @@ def trust_acknowledge(ecosystem: str, package: str, change_id: int = typer.Optio
 @benchmark_app.command("run")
 def benchmark_run(output: Path | None = typer.Option(None, "--output"),
                   scenario: str | None = typer.Option(None, "--scenario")) -> None:
+    import datetime
+    import uuid
+
     from .benchmark.dataset import default_scenarios
-    from .benchmark.runner import run_scenarios
     from .benchmark.metrics import compute
     from .benchmark.models import RunSummary
     from .benchmark.reporter import render_terminal, write_json
-    import datetime, uuid
+    from .benchmark.runner import run_scenarios
     scenarios = default_scenarios()
     if scenario:
         scenarios = [s for s in scenarios if s.scenario_id == scenario]

@@ -11,11 +11,10 @@ from pathlib import Path
 from .analyzer import AnalyzeOptions, analyze_release
 from .ecosystems import RegistryError, get_ecosystem, make_client
 from .models import Report
-from .trust.models import TrustBaseline, IdentityObservation, BaselineStatus
-from .trust.identity import repo_identity
-from .trust.compare import detect_changes
-from datetime import datetime, timezone as _tz
 from .report import to_markdown
+from .trust.compare import detect_changes
+from .trust.identity import repo_identity
+from .trust.models import BaselineStatus, IdentityObservation, TrustBaseline
 
 
 def db_path() -> Path:
@@ -203,10 +202,9 @@ def run_once(conn: sqlite3.Connection, out_dir: Path, opts: AnalyzeOptions | Non
             # Baseline conversion helpers
             baseline_obj = None
             if active:
-                import sqlite3 as _sq
                 # map row -> TrustBaseline by column names
                 cols = [c[0] for c in conn.execute("PRAGMA table_info(trust_baselines)").fetchall()]
-                d = dict(zip(cols, active))
+                d = dict(zip(cols, active, strict=True))
                 baseline_obj = TrustBaseline(
                     ecosystem=d["ecosystem"], package_name=d["package_name"],
                     repository_url=d["repository_url"], repository_owner=d["repository_owner"],
@@ -274,9 +272,11 @@ def list_baselines(conn, ecosystem=None, name=None):
     q="SELECT * FROM trust_baselines WHERE 1=1"
     params=[]
     if ecosystem:
-        q+=" AND ecosystem=?"; params.append(ecosystem)
+        q+=" AND ecosystem=?"
+        params.append(ecosystem)
     if name:
-        q+=" AND package_name=?"; params.append(name)
+        q+=" AND package_name=?"
+        params.append(name)
     q+=" ORDER BY id"
     return conn.execute(q, params).fetchall()
 

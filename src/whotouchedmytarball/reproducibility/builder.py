@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
 from .environment import DockerBuildEnvironment, DockerConfig, EnvironmentUnavailableError
-from .models import BuildEnvironmentInfo, BuildLimits, BuildResult, NetworkPolicy, VerificationStatus
+from .models import BuildLimits, BuildResult, NetworkPolicy, VerificationStatus
 
 
 class BuildExecutor:

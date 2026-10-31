@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .identity import ObservedIdentity, baseline_to_observed, from_observation
-from .models import TrustBaseline, IdentityObservation, TrustChange, ChangeStatus
+from .identity import baseline_to_observed, from_observation
+from .models import ChangeStatus, IdentityObservation, TrustBaseline, TrustChange
 
 
 def _now() -> str:

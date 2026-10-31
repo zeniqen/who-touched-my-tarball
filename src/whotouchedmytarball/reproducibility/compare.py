@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from pathlib import Path
 
 from ..compare import list_files, sha256
 from .models import ArtifactComparison, FileComparison, VerificationStatus
-from .normalize import normalized_tree_hash, sha256_file
+from .normalize import normalize_archive, normalized_tree_hash, sha256_file
 
 RUNTIME_EXTENSIONS = {
     ".js", ".mjs", ".cjs", ".ts", ".py", ".pth", ".sh", ".bash",
@@ -25,25 +27,20 @@ def _affects_runtime(path: str) -> bool:
 
 def compare_artifact_trees(registry_root: Path, rebuilt_root: Path, *, registry_archive: Path | None = None,
                             rebuilt_archive: Path | None = None) -> ArtifactComparison:
-    compare_artifacts = compare_artifacts if False else None
     reg_files = list_files(registry_root) if registry_root else {}
     reb_files = list_files(rebuilt_root) if rebuilt_root else {}
 
     comparison = ArtifactComparison()
     if registry_archive is not None:
-        from .normalize import sha256_file
         comparison.original_hash = sha256_file(registry_archive)
     else:
         comparison.original_hash = _root_hash(registry_root) if registry_root else ""
     if rebuilt_archive is not None:
-        from .normalize import sha256_file
         comparison.rebuilt_hash = sha256_file(rebuilt_archive)
     else:
         comparison.rebuilt_hash = _root_hash(rebuilt_root) if rebuilt_root else ""
 
     if registry_archive is not None and rebuilt_archive is not None:
-        from .normalize import normalize_archive
-        import tempfile, os
         d1 = Path(tempfile.mkdtemp())
         d2 = Path(tempfile.mkdtemp())
         try:
@@ -106,12 +103,7 @@ def compare_artifact_trees(registry_root: Path, rebuilt_root: Path, *, registry_
 def _root_hash(root: Path) -> str:
     # Hash of whole extracted tree (file contents + paths) approximated by normalized tree hash on raw bytes.
     # We keep original hash as sha256 of concatenated file bytes in path order for traceability.
-    from ..compare import list_files, sha256
-
     files = list_files(root)
-    h = hashlib.sha256() if False else None
-    import hashlib
-
     h = hashlib.sha256()
     for rel in sorted(files):
         h.update(rel.encode("utf-8"))

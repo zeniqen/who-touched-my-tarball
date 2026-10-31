@@ -1,6 +1,6 @@
-from whotouchedmytarball.trust.models import TrustBaseline, IdentityObservation, BaselineStatus
-from whotouchedmytarball.trust.identity import normalize_repo_url, repo_identity
 from whotouchedmytarball.trust.compare import detect_changes
+from whotouchedmytarball.trust.identity import normalize_repo_url
+from whotouchedmytarball.trust.models import BaselineStatus, IdentityObservation, TrustBaseline
 
 
 def test_repo_normalization():

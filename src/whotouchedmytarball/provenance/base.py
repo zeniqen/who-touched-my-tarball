@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .sigstore import SIGSTORE_AVAILABLE
 from .models import (
     AttestationStatus,
     BindingStatus,
@@ -13,6 +12,7 @@ from .models import (
     TrustStatus,
     VerificationStatus,
 )
+from .sigstore import SIGSTORE_AVAILABLE
 
 
 def finalize_status(result: ProvenanceResult) -> VerificationStatus:

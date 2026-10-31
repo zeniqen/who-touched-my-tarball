@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
-from ..analyzer import analyze_local, AnalyzeOptions
+from ..analyzer import AnalyzeOptions, analyze_local
 from .models import Scenario, ScenarioResult
 
 

@@ -6,14 +6,11 @@ Builds never run on the host. When Docker is unavailable the verification report
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
 
-from .models import BuildEnvironmentInfo, BuildLimits, NetworkPolicy, VerificationStatus
-
+from .models import BuildEnvironmentInfo, BuildLimits, NetworkPolicy
 
 SENSITIVE_PATHS = (
     "/root", "/home", "/Users", "/.ssh", "/.aws", "/.gnupg",
@@ -95,7 +92,7 @@ class DockerBuildEnvironment:
         return [
             f"--cpus={lim.cpu}",
             f"--memory={lim.memory_mb}m",
-            f"--pids-limit=256",
+            "--pids-limit=256",
         ]
 
     def _security_args(self) -> list[str]:

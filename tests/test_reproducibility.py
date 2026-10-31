@@ -1,13 +1,12 @@
-from pathlib import Path
 
+from whotouchedmytarball.reproducibility.compare import classify_status, compare_artifact_trees
+from whotouchedmytarball.reproducibility.models import NetworkPolicy, VerificationStatus
+from whotouchedmytarball.reproducibility.normalize import normalized_tree_hash
 from whotouchedmytarball.reproducibility.recipe import discover_recipe, has_sufficient_information
-from whotouchedmytarball.reproducibility.normalize import normalized_tree_hash, normalize_archive
-from whotouchedmytarball.reproducibility.compare import compare_artifact_trees, classify_status
-from whotouchedmytarball.reproducibility.environment import docker_available
-from whotouchedmytarball.reproducibility.models import VerificationStatus, NetworkPolicy
+from whotouchedmytarball.reproducibility.verifier import verify_build
+
 
 def write_tree(root, files):
-    from pathlib import Path
     for rel, content in files.items():
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -16,7 +15,6 @@ def write_tree(root, files):
         else:
             path.write_text(content)
     return root
-from whotouchedmytarball.reproducibility.verifier import verify_build
 
 
 def test_recipe_npm(tmp_path):

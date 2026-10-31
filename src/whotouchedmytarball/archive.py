@@ -56,16 +56,27 @@ def _write_member(dest: Path, rel: str, data_stream) -> int:
     resolved_dest = dest.resolve()
     if not str(target.resolve()).startswith(str(resolved_dest) + os.sep):
         raise UnsafeArchiveError(f"member escapes destination: {rel!r}")
-    target.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    with open(target, "wb") as out:
-        while True:
-            chunk = data_stream.read(1024 * 1024)
-            if not chunk:
-                break
-            written += len(chunk)
-            out.write(chunk)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "wb") as out:
+            while True:
+                chunk = data_stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                out.write(chunk)
+    except (FileExistsError, NotADirectoryError, IsADirectoryError) as exc:
+        raise UnsafeArchiveError(f"archive uses {rel!r} as both a file and a directory") from exc
     return written
+
+
+def _claim(seen: dict[str, str], rel: str) -> None:
+    """Refuse names that differ only in case: on case-insensitive file systems (macOS, Windows) the
+    second one would overwrite the first on disk, so the analyzed content would not be what ships."""
+    other = seen.setdefault(rel.lower(), rel)
+    if other != rel:
+        raise UnsafeArchiveError(f"archive has names that differ only in case: {other!r} and {rel!r}")
 
 
 def extract(archive: Path, dest: Path) -> ExtractResult:
@@ -79,6 +90,7 @@ def extract(archive: Path, dest: Path) -> ExtractResult:
     skipped: list[str] = []
     total = 0
     count = 0
+    seen: dict[str, str] = {}
 
     if name.endswith(TAR_SUFFIXES):
         with tarfile.open(archive, "r:*") as tf:
@@ -91,6 +103,7 @@ def extract(archive: Path, dest: Path) -> ExtractResult:
                 if not member.isfile():
                     skipped.append(f"{rel} ({'symlink' if member.issym() else 'link/special file'})")
                     continue
+                _claim(seen, rel)
                 count += 1
                 total += member.size
                 if count > MAX_FILES or total > MAX_TOTAL_BYTES:
@@ -109,6 +122,7 @@ def extract(archive: Path, dest: Path) -> ExtractResult:
                 if mode == 0o120000:  # symlink stored in zip
                     skipped.append(f"{rel} (symlink)")
                     continue
+                _claim(seen, rel)
                 count += 1
                 total += info.file_size
                 if count > MAX_FILES or total > MAX_TOTAL_BYTES:

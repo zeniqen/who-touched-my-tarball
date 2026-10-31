@@ -127,18 +127,27 @@ pip install -e ".[dev]"
 ruff check . && pytest -q
 ```
 
-The test suite runs offline. It covers:
+Requirements are in [`docs/PRD.md`](docs/PRD.md); its traceability table maps each requirement (FR-*, SEC-*) to its tests.
 
-- archive attacks (path traversal, absolute paths, symlinks)
-- the tampered demo
-- a debug/chalk-style payload, an XZ-style modified `.m4`, and a malicious `.pth` in a wheel
-- build output explained by its TypeScript source
-- injected build output that must not be explained
-- previous-release baselines
-- provenance parsing
-- the rule that the model cannot clear hard evidence
+The default suite runs offline: no network, Docker or model. It covers:
 
-CI runs the tests on Python 3.10 and 3.12. It also checks that the tampered demo exits with code 2.
+| File | What it checks |
+|---|---|
+| `test_prd_detection.py` | Attack corpus that must be `SUSPICIOUS`, modelled on real incidents (XZ release-only `.m4`, debug/chalk wallet drainer, Shai-Hulud worm, event-stream loader, ua-parser-js, Trojan Source, injected dependencies, `setup.py` droppers, `.pth`, W4SP). Also a benign corpus (metadata, docs, TS builds, source maps, CRLF, wheels) that must be `CLEAN`. |
+| `test_security_hardening.py` | Hostile archives: traversal, links, devices, bombs, case collisions. Also: no package code ever runs, safe git, no reads outside the trees. |
+| `test_provenance.py` | Attestation parsing in npm's real format, sha512/sha256 binding, look-alike repositories, short-commit spoofing, digest and identity mismatch, trust continuity. |
+| `test_llm_safety.py` | Prompt injection can't clear evidence or escape the `<untrusted>` block. Malformed model output doesn't crash. Only snippets are sent. |
+| `test_monitor.py` | Watch list, one report per version, report paths can't escape the output folder, failures isolated. |
+| `test_ecosystems.py` | Registry digest checks, and a toy ecosystem adapter running the full pipeline (extensibility). |
+| others | Unit tests for archive, compare, signals, sources, CLI, LLM merge policy, reproducibility, trust. |
+
+Live tests check real releases (`debug`, `axios`, `ky`, `requests`, and `semver` provenance) against npm, PyPI and GitHub. They are opt-in:
+
+```bash
+pytest -m live
+```
+
+CI runs the offline suite on Python 3.10 and 3.12. It also checks that the tampered demo exits with code 2.
 
 ## Limitations
 

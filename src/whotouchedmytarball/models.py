@@ -120,3 +120,6 @@ class Report(BaseModel):
     stats: dict[str, int] = Field(default_factory=dict)
     findings: list[Finding] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    reproducible_build: dict | None = None
+    provenance_verification: dict | None = None
+    trust_continuity: dict | None = None

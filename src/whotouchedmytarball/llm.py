@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 import httpx
 
@@ -19,6 +20,8 @@ from .models import AIAssessment, Category, Finding, Severity
 DEFAULT_MODEL = os.environ.get("WTMT_MODEL", "beam:cloud")
 DEFAULT_FALLBACK = os.environ.get("WTMT_FALLBACK_MODEL") or None
 VALID_VERDICTS = {"benign", "suspicious", "malicious", "uncertain"}
+# Package text must not be able to close (or reopen) the <untrusted> wrapper and speak as the tool.
+UNTRUSTED_TAG = re.compile(r"<\s*/?\s*untrusted\s*>", re.IGNORECASE)
 
 SYSTEM_PROMPT = """You are a software supply-chain security analyst.
 You compare a file published in a package registry (npm or PyPI) with the same project's source
@@ -103,7 +106,7 @@ def build_prompt(finding: Finding, package: str, ecosystem: str, max_chars: int 
         parts.append("Snippets around the signals:\n" + "\n".join(missing))
     if finding.diff_excerpt:
         parts.append("Diff excerpt:\n" + finding.diff_excerpt)
-    excerpt = "\n\n".join(parts)[:max_chars]
+    excerpt = UNTRUSTED_TAG.sub("[tag removed]", "\n\n".join(parts))[:max_chars]
     return (
         f"Ecosystem: {ecosystem}\nPackage: {package}\nFile: {finding.path}\n"
         f"Difference: {finding.kind.value} ({finding.category.value})\n"
@@ -114,6 +117,8 @@ def build_prompt(finding: Finding, package: str, ecosystem: str, max_chars: int 
 
 
 def parse_assessment(data: dict, model: str) -> AIAssessment:
+    if not isinstance(data, dict):
+        raise ValueError(f"model reply is not a JSON object: {str(data)[:80]}")
     verdict = str(data.get("verdict", "uncertain")).lower().strip()
     if verdict not in VALID_VERDICTS:
         verdict = "uncertain"

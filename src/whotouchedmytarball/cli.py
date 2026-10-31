@@ -10,8 +10,11 @@ from rich.console import Console
 
 from . import __version__
 from .analyzer import AnalyzeOptions, analyze_local, analyze_release
+from .reproducibility.verifier import verify_build
+from .reproducibility.models import NetworkPolicy
+from .provenance.verifier import verify_provenance
 from .archive import UnsafeArchiveError, UnsupportedArchiveError
-from .ecosystems import RegistryError
+from .ecosystems import RegistryError, get_ecosystem
 from .llm import DEFAULT_FALLBACK, DEFAULT_MODEL, OllamaClient
 from .models import Report
 from .report import render_terminal, to_markdown
@@ -23,6 +26,10 @@ app = typer.Typer(
 )
 watch_app = typer.Typer(help="Monitor packages and analyze every new release.", no_args_is_help=True)
 app.add_typer(watch_app, name="watch")
+benchmark_app = typer.Typer(help="Detection benchmarking.", no_args_is_help=True)
+app.add_typer(benchmark_app, name="benchmark")
+trust_app = typer.Typer(help="Inspect and manage trust baselines.", no_args_is_help=True)
+app.add_typer(trust_app, name="trust")
 
 console = Console()
 err = Console(stderr=True)
@@ -168,6 +175,292 @@ def watch_run(
             break
         time.sleep(interval)
 
+
+@app.command("verify-build")
+def verify_build_cmd(
+    ecosystem: str = typer.Argument(..., help="npm or pypi"),
+    spec: str = typer.Argument(..., help="Package spec: npm <name>@<version> or pypi <name>==<version>"),
+    timeout: int = typer.Option(600, "--timeout", help="Build timeout in seconds"),
+    memory_limit: int = typer.Option(2048, "--memory-limit", help="Memory limit in MB"),
+    cpu_limit: float = typer.Option(2.0, "--cpu-limit", help="CPU limit"),
+    network_policy: str = typer.Option("none", "--network-policy", help="none, limited, or full"),
+    output: Path | None = typer.Option(None, "--output", help="Write verification result JSON to this path"),
+    keep_build_artifacts: bool = typer.Option(False, "--keep-build-artifacts", help="Keep rebuilt artifacts"),
+    verbose: bool = typer.Option(False, "--verbose", help="Verbose output"),
+    source: str | None = typer.Option(None, "--source", help="Override source repository/path"),
+    ref: str | None = typer.Option(None, "--ref", help="Git ref to build from"),
+) -> None:
+    """Independently rebuild a published package and compare it with the registry artifact."""
+    # Parse spec
+    if ecosystem.lower() == "npm":
+        if "@" in spec and not spec.startswith("@"):
+            # name@version (handle scoped by last @)
+            idx = spec.rfind("@")
+            package, version = spec[:idx], spec[idx + 1:]
+        elif "@" in spec and spec.startswith("@"):
+            # scoped: @scope/pkg@version
+            idx = spec.rfind("@")
+            package, version = spec[:idx], spec[idx + 1:]
+        else:
+            package, version = spec, None
+    else:
+        if "==" in spec:
+            package, version = spec.split("==", 1)
+        elif "@" in spec:
+            package, version = spec.split("@", 1)
+        else:
+            package, version = spec, None
+
+    try:
+        np = NetworkPolicy(network_policy)
+    except ValueError:
+        err.print(f"[red]error:[/red] invalid network policy: {network_policy}")
+        raise typer.Exit(3)
+
+    try:
+        result = verify_build(
+            ecosystem, package, version, source=source, ref=ref, timeout=timeout,
+            memory_limit=memory_limit, cpu_limit=cpu_limit, network_policy=np,
+            keep_build_artifacts=keep_build_artifacts, progress=(lambda m: err.print(f"[dim]> {m}[/dim]") if verbose or True else None),
+        )
+    except Exception as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+
+    from .reproducibility.models import VerificationResult
+
+    data = result.as_dict()
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        output.write_text(_json.dumps(data, indent=2))
+    console.print(f"Verification status: {result.status.value}")
+    console.print(f"Files matched: {result.files_matched}, mismatched: {result.files_mismatched}")
+    if result.missing_files:
+        console.print(f"Missing: {', '.join(result.missing_files)}")
+    if result.unexpected_files:
+        console.print(f"Unexpected: {', '.join(result.unexpected_files)}")
+    if result.notes:
+        for n in result.notes:
+            console.print(f"note: {n}")
+    # exit codes: build/environment issues => 1, mismatches => 2? Keep 0 only exact/normalized.
+    if result.status.value in ("EXACT_MATCH", "NORMALIZED_MATCH"):
+        raise typer.Exit(0)
+    if result.status.value in ("ENVIRONMENT_UNAVAILABLE", "BUILD_FAILURE", "VERIFICATION_ERROR",
+                              "INSUFFICIENT_BUILD_INFORMATION", "UNSUPPORTED_BUILD_SYSTEM",
+                              "SOURCE_REVISION_MISMATCH"):
+        raise typer.Exit(1)
+    raise typer.Exit(2)
+
+
+
+@app.command("verify-provenance")
+def verify_provenance_cmd(
+    ecosystem: str = typer.Argument(..., help="npm or pypi"),
+    spec: str = typer.Argument(..., help="Package spec: npm <name>@<version> or pypi <name>==<version>"),
+    expected_repository: str | None = typer.Option(None, "--expected-repository", help="Expected source repository URL"),
+    expected_commit: str | None = typer.Option(None, "--expected-commit", help="Expected source commit"),
+    expected_workflow: str | None = typer.Option(None, "--expected-workflow", help="Expected build workflow"),
+    output: Path | None = typer.Option(None, "--output", help="Write JSON result to path"),
+    json_out: bool = typer.Option(False, "--json", help="Print result as JSON"),
+    verbose: bool = typer.Option(False, "--verbose", help="Verbose"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable attestation cache"),
+    strict: bool = typer.Option(False, "--strict", help="Fail unless VERIFIED"),
+) -> None:
+    """Independently verify cryptographic provenance of a published package."""
+    if ecosystem.lower() == "npm":
+        idx = spec.rfind("@")
+        package, version = (spec[:idx], spec[idx+1:]) if "@" in spec and idx > 0 else (spec, None)
+    else:
+        if "==" in spec:
+            package, version = spec.split("==", 1)
+        elif "@" in spec:
+            package, version = spec.split("@", 1)
+        else:
+            package, version = spec, None
+    try:
+        result = verify_provenance(ecosystem, package, version, expected_repository=expected_repository,
+                                   expected_commit=expected_commit, expected_workflow=expected_workflow,
+                                   no_cache=no_cache, progress=(lambda m: err.print(f"[dim]> {m}[/dim]") if verbose else None))
+    except Exception as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    data = result.as_dict()
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        output.write_text(_json.dumps(data, indent=2))
+    if json_out or verbose:
+        err.print(_json.dumps(data, indent=2) if False else "")
+    import json as _json
+    console.print(f"Provenance status: {result.status.value}")
+    console.print(f"Trust status: {result.trust_status.value}")
+    console.print("")
+    console.print("Cryptographic Provenance Verification")
+    console.print("Attestation Retrieval       AVAILABLE")
+    console.print("in-toto Parsing             AVAILABLE")
+    console.print("SLSA Parsing                AVAILABLE")
+    console.print("Artifact Digest Binding     AVAILABLE")
+    try:
+        from .provenance.sigstore import SIGSTORE_AVAILABLE
+        sig = "AVAILABLE" if SIGSTORE_AVAILABLE else "UNAVAILABLE"
+    except Exception:
+        sig = "UNAVAILABLE"
+    console.print(f"Sigstore Verification       {sig}")
+    console.print(f"Certificate Validation     {sig}")
+    console.print(f"Rekor Verification          {sig}")
+    if result.verification_errors:
+        for e in result.verification_errors:
+            err.print(f"error: {e}")
+    if strict and result.status.value != "VERIFIED":
+        raise typer.Exit(2)
+    if result.status.value in ("VERIFIED", "VERIFIED_UNTRUSTED"):
+        raise typer.Exit(0)
+    if result.status.value in ("MISSING_PROVENANCE", "VERIFICATION_UNAVAILABLE", "RETRIEVAL_ERROR"):
+        raise typer.Exit(1)
+    raise typer.Exit(2)
+
+
+
+
+
+@trust_app.command("show")
+def trust_show(ecosystem: str, package: str) -> None:
+    from .monitor import connect, get_active_baseline
+    conn = connect()
+    row = get_active_baseline(conn, get_ecosystem(ecosystem).name, package)
+    console.print(row if row else "No baseline found")
+
+
+@trust_app.command("history")
+def trust_history(ecosystem: str, package: str) -> None:
+    from .monitor import connect, list_baselines
+    conn = connect()
+    for row in list_baselines(conn, get_ecosystem(ecosystem).name, package):
+        console.print(row)
+
+
+@trust_app.command("changes")
+def trust_changes(ecosystem: str, package: str) -> None:
+    from .monitor import connect
+    conn = connect()
+    eco = get_ecosystem(ecosystem).name
+    rows = conn.execute(
+        "SELECT id,field,previous_value,current_value,severity,category,first_detected_at,status FROM trust_changes WHERE ecosystem=? AND package_name=?",
+        (eco, package),
+    ).fetchall()
+    for row in rows:
+        console.print(row)
+
+
+@trust_app.command("baseline")
+def trust_baseline(ecosystem: str, package: str) -> None:
+    from .monitor import connect, list_baselines
+    conn = connect()
+    eco = get_ecosystem(ecosystem).name
+    rows = list_baselines(conn, eco, package)
+    if not rows:
+        console.print("No baseline records.")
+    for row in rows:
+        console.print(row)
+
+
+
+@trust_app.command("approve")
+def trust_approve(ecosystem: str, package: str, change_id: int = typer.Option(..., "--change-id")) -> None:
+    from .monitor import connect, approve_change
+    conn = connect()
+    approve_change(conn, get_ecosystem(ecosystem).name, package, change_id)
+    console.print(f"Approved change {change_id}")
+
+
+@trust_app.command("reject")
+def trust_reject(ecosystem: str, package: str, change_id: int = typer.Option(..., "--change-id")) -> None:
+    from .monitor import connect, reject_change
+    conn = connect()
+    reject_change(conn, get_ecosystem(ecosystem).name, package, change_id)
+    console.print(f"Rejected change {change_id}")
+
+
+@trust_app.command("acknowledge")
+def trust_acknowledge(ecosystem: str, package: str, change_id: int = typer.Option(..., "--change-id")) -> None:
+    from .monitor import connect, acknowledge_change
+    conn = connect()
+    acknowledge_change(conn, get_ecosystem(ecosystem).name, package, change_id)
+    console.print(f"Acknowledged change {change_id}")
+
+
+
+
+@benchmark_app.command("run")
+def benchmark_run(output: Path | None = typer.Option(None, "--output"),
+                  scenario: str | None = typer.Option(None, "--scenario")) -> None:
+    from .benchmark.dataset import default_scenarios
+    from .benchmark.runner import run_scenarios
+    from .benchmark.metrics import compute
+    from .benchmark.models import RunSummary
+    from .benchmark.reporter import render_terminal, write_json
+    import datetime, uuid
+    scenarios = default_scenarios()
+    if scenario:
+        scenarios = [s for s in scenarios if s.scenario_id == scenario]
+    results = run_scenarios(scenarios)
+    tp, tn, fp, fn, inc, precision, recall, specificity, f1, accuracy, fpr, fnr = compute(results)
+    summary = RunSummary(
+        run_id=str(uuid.uuid4()),
+        dataset_version=__import__("whotouchedmytarball.benchmark.dataset", fromlist=["DATASET_VERSION"]).DATASET_VERSION,
+        started_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        total=len(results),
+        malicious=sum(1 for r in results if r.label == "malicious"),
+        benign=sum(1 for r in results if r.label == "benign"),
+        tp=tp, tn=tn, fp=fp, fn=fn, inconclusive=inc,
+        precision=precision, recall=recall, specificity=specificity, f1=f1,
+        accuracy=accuracy, fpr=fpr, fnr=fnr, results=results,
+    )
+    from .benchmark.history import save_run
+    path = save_run(summary)
+    render_terminal(summary, console)
+    console.print(f"Run ID: {summary.run_id}")
+    console.print(f"Saved: {path}")
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        write_json(output, summary)
+        console.print(f"Wrote {output}")
+
+
+@benchmark_app.command("list")
+def benchmark_list() -> None:
+    from .benchmark.dataset import default_scenarios
+    for s in default_scenarios():
+        console.print(f"{s.scenario_id}  {s.ecosystem}  {s.label}  {s.category}")
+
+
+
+@benchmark_app.command("list")
+def benchmark_list_cmd() -> None:
+    from .benchmark.history import list_runs
+    for rid in list_runs():
+        console.print(rid)
+
+
+@benchmark_app.command("compare")
+def benchmark_compare(baseline: str = typer.Option(..., "--baseline"),
+                     current: str = typer.Option(..., "--current")) -> None:
+    from .benchmark.history import load_run
+    b = load_run(baseline)
+    c = load_run(current)
+    console.print(f"Baseline recall={b.get('recall'):.3f} precision={b.get('precision'):.3f} fpr={b.get('fpr'):.3f}")
+    console.print(f"Current  recall={c.get('recall'):.3f} precision={c.get('precision'):.3f} fpr={c.get('fpr'):.3f}")
+    console.print(f"Recall delta: {c.get('recall',0)-b.get('recall',0):+.3f}")
+    console.print(f"Precision delta: {c.get('precision',0)-b.get('precision',0):+.3f}")
+    console.print(f"FPR delta: {c.get('fpr',0)-b.get('fpr',0):+.3f}")
+    # critical FN check
+    b_ids = {r["scenario_id"] for r in b.get("results",[]) if r.get("label")=="malicious" and not r.get("predicted_malicious")}
+    c_ids = {r["scenario_id"] for r in c.get("results",[]) if r.get("label")=="malicious" and not r.get("predicted_malicious")}
+    new_fn = c_ids - b_ids
+    if new_fn:
+        console.print(f"NEW CRITICAL FALSE NEGATIVES: {', '.join(sorted(new_fn))}")
 
 @app.command()
 def version() -> None:

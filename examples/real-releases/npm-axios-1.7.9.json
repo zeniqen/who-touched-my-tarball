@@ -1,0 +1,44 @@
+{
+  "tool_version": "0.1.0",
+  "ecosystem": "npm",
+  "package": "axios",
+  "version": "1.7.9",
+  "artifact": "https://registry.npmjs.org/axios/-/axios-1.7.9.tgz",
+  "artifact_integrity": "verified against registry digest (sha512)",
+  "source": {
+    "repository": "https://github.com/axios/axios",
+    "ref": "b2cb45d5a533a5465c99559b16987e4d5fc08cbc",
+    "commit": "b2cb45d5a533a5465c99559b16987e4d5fc08cbc",
+    "resolved_by": "commit recorded by the registry/provenance (cached)",
+    "root_prefix": ""
+  },
+  "provenance": {
+    "available": true,
+    "kind": "npm SLSA provenance (Sigstore)",
+    "repository": "https://github.com/axios/axios",
+    "commit": "b2cb45d5a533a5465c99559b16987e4d5fc08cbc",
+    "ref": "refs/heads/v1.x",
+    "workflow": ".github/workflows/publish.yml",
+    "matches_source": true,
+    "note": "Attestation published by the npm registry. Its Sigstore signature is verified by npm at publish time; this tool reads the claims and checks them against the source it compares."
+  },
+  "previous_version": "1.7.8",
+  "verdict": "CLEAN",
+  "risk_score": 0,
+  "summary": "86 of 86 published files are byte-identical to the source; 0 differ and 0 exist only in the package. Every difference is explained by normal packaging or build steps.",
+  "stats": {
+    "package_files": 86,
+    "source_files": 246,
+    "identical": 86,
+    "modified": 0,
+    "package_only": 0,
+    "source_only": 160,
+    "severity_critical": 0,
+    "severity_high": 0,
+    "severity_medium": 0,
+    "severity_low": 0,
+    "severity_info": 0
+  },
+  "findings": [],
+  "notes": []
+}

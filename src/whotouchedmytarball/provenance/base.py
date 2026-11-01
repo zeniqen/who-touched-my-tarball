@@ -1,0 +1,62 @@
+"""Shared provenance base helpers."""
+
+from __future__ import annotations
+
+from .models import (
+    AttestationStatus,
+    BindingStatus,
+    CertificateStatus,
+    ProvenanceResult,
+    RetrievalStatus,
+    SignatureStatus,
+    TrustStatus,
+    VerificationStatus,
+)
+from .sigstore import SIGSTORE_AVAILABLE
+
+MISMATCHES = (TrustStatus.IDENTITY_MISMATCH, TrustStatus.SOURCE_REVISION_MISMATCH, TrustStatus.WORKFLOW_MISMATCH)
+
+
+def finalize_status(result: ProvenanceResult) -> VerificationStatus:
+    d = result.dimensions
+    if d.retrieval == RetrievalStatus.UNAVAILABLE:
+        return VerificationStatus.VERIFICATION_UNAVAILABLE
+    if d.retrieval == RetrievalStatus.ERROR:
+        return VerificationStatus.RETRIEVAL_ERROR
+    if d.retrieval == RetrievalStatus.NOT_FOUND:
+        return VerificationStatus.MISSING_PROVENANCE
+    # Negative evidence wins over "could not check the signature": an attestation for other bytes
+    # or another repository is a finding whether or not sigstore is installed.
+    if d.artifact_binding == BindingStatus.MISMATCH:
+        return VerificationStatus.DIGEST_MISMATCH
+    if d.identity_trust in MISMATCHES:
+        return VerificationStatus.IDENTITY_MISMATCH
+    if d.signature == SignatureStatus.NOT_CHECKED and not SIGSTORE_AVAILABLE:
+        return VerificationStatus.VERIFICATION_UNAVAILABLE
+    if d.signature == SignatureStatus.INVALID:
+        return VerificationStatus.INVALID_SIGNATURE
+    if d.certificate == CertificateStatus.INVALID:
+        return VerificationStatus.INVALID_CERTIFICATE
+    if d.attestation == AttestationStatus.INVALID:
+        return VerificationStatus.INVALID_ATTESTATION
+    if d.attestation == AttestationStatus.INCOMPLETE:
+        return VerificationStatus.INCOMPLETE_PROVENANCE
+    if (d.signature == SignatureStatus.VALID and d.certificate == CertificateStatus.VALID
+            and d.artifact_binding == BindingStatus.MATCH
+            and d.attestation in (AttestationStatus.VALID, AttestationStatus.NOT_CHECKED)):
+        if d.identity_trust == TrustStatus.TRUSTED_IDENTITY:
+            return VerificationStatus.VERIFIED
+        return VerificationStatus.VERIFIED_UNTRUSTED
+    return VerificationStatus.INVALID_ATTESTATION
+
+
+def verify_attestation_structure(att: dict | None) -> list[str]:
+    errors = []
+    if not isinstance(att, dict):
+        errors.append("attestation is not an object")
+        return errors
+    from .intoto import parse_statement
+
+    stmt, errs = parse_statement(att.get("statement") or att)
+    errors.extend(errs)
+    return errors

@@ -1,0 +1,44 @@
+{
+  "tool_version": "0.1.0",
+  "ecosystem": "npm",
+  "package": "debug",
+  "version": "4.4.1",
+  "artifact": "https://registry.npmjs.org/debug/-/debug-4.4.1.tgz",
+  "artifact_integrity": "verified against registry digest (sha512)",
+  "source": {
+    "repository": "https://github.com/debug-js/debug",
+    "ref": "33330fa8616b9b33f29f7674747be77266878ba6",
+    "commit": "33330fa8616b9b33f29f7674747be77266878ba6",
+    "resolved_by": "commit recorded by the registry/provenance (cached)",
+    "root_prefix": ""
+  },
+  "provenance": {
+    "available": false,
+    "kind": null,
+    "repository": null,
+    "commit": null,
+    "ref": null,
+    "workflow": null,
+    "matches_source": null,
+    "note": "No npm provenance attestation was published for this version"
+  },
+  "previous_version": "4.4.0",
+  "verdict": "CLEAN",
+  "risk_score": 0,
+  "summary": "7 of 7 published files are byte-identical to the source; 0 differ and 0 exist only in the package. Every difference is explained by normal packaging or build steps.",
+  "stats": {
+    "package_files": 7,
+    "source_files": 13,
+    "identical": 7,
+    "modified": 0,
+    "package_only": 0,
+    "source_only": 6,
+    "severity_critical": 0,
+    "severity_high": 0,
+    "severity_medium": 0,
+    "severity_low": 0,
+    "severity_info": 0
+  },
+  "findings": [],
+  "notes": []
+}

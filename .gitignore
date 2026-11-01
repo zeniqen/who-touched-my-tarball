@@ -9,3 +9,5 @@ venv/
 .ruff_cache/
 wtmt-reports/
 .DS_Store
+.wtmt-web/
+```

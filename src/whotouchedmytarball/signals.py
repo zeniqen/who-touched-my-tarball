@@ -114,8 +114,11 @@ RULES: list[Rule] = [
        "Touches credential files", "secrets"),
     _r("token-names", r"\b(NPM_TOKEN|NODE_AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN|PYPI_TOKEN|AWS_SECRET_ACCESS_KEY|"
        r"AWS_ACCESS_KEY_ID)\b", Severity.MEDIUM, "References CI/registry secrets", "secrets"),
-    _r("env-dump", r"(JSON\.stringify\(\s*process\.env\s*\)|dict\(\s*os\.environ\s*\)|os\.environ\.copy\(\))",
-       Severity.HIGH, "Serializes the whole environment", "secrets"),
+    _r("env-dump", r"(JSON\.stringify\(\s*process\.env\s*\)|\.\.\.\s*process\.env\b|dict\(\s*[\w.]*\benviron\s*\)|"
+       r"[\w.]*\benviron\.copy\(\)|\{\s*\*\*\s*[\w.]*\benviron\s*\})",
+       Severity.HIGH, "Serializes the whole environment (however os/environ was imported)", "secrets"),
+    _r("env-import", r"\bfrom\s+os\s+import\s+[^\n]*\benviron\b", Severity.LOW,
+       "Imports the process environment by name", "secrets"),
     # Runtime hooks (debug/chalk September 2025 style)
     _r("hook-network-api", r"(XMLHttpRequest\.prototype\.(open|send)\s*=|(window|globalThis|self)\.fetch\s*=)",
        Severity.HIGH, "Overrides browser network APIs", "hook"),
@@ -127,6 +130,8 @@ RULES: list[Rule] = [
 ]
 
 DECODE_GROUPS = {"decode", "obfuscation"}
+COLLECT_GROUPS = {"secrets"}
+SEND_GROUPS = {"network"}
 DANGER_GROUPS = {"exec", "process", "network", "secrets", "hook"}
 
 
@@ -190,17 +195,28 @@ RULE_GROUPS = {rule.id: rule.group for rule in RULES}
 
 
 def combo_signal(signals: list[Signal]) -> Signal | None:
-    """Return a CRITICAL signal when unexplained decoding and dangerous behaviour appear together."""
+    """Return a combination signal for unexplained behaviour that is only alarming together:
+    decoding + dangerous behaviour (CRITICAL), or secret collection + network (HIGH)."""
     active = [s for s in signals if s.explained_by is None]
     groups = {RULE_GROUPS.get(s.rule, "misc") for s in active}
     if any(s.rule in ("high-entropy", "very-long-line") for s in active):
         groups.add("obfuscation")
+    # Anchor synthetic combo signals to a contributing line so the finding keeps a citeable location.
+    anchor = next((s.line for s in active if s.line is not None), None)
     if groups & DECODE_GROUPS and groups & DANGER_GROUPS:
         return Signal(
             rule="decode-and-execute",
             description="Decodes or hides data and also executes code, spawns processes, reads secrets or "
             "talks to the network",
             severity=Severity.CRITICAL,
+            line=anchor,
+        )
+    if groups & COLLECT_GROUPS and groups & SEND_GROUPS:
+        return Signal(
+            rule="collect-and-send",
+            description="Reads secrets or the environment and also talks to the network (exfiltration shape)",
+            severity=Severity.HIGH,
+            line=anchor,
         )
     return None
 

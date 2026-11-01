@@ -125,6 +125,135 @@ def diff(
     _emit(report, json_out, md_out, show_all, quiet, exit_zero)
 
 
+def _attack_table(attacks) -> None:
+    from rich.table import Table
+
+    table = Table(title="Modelled attacks (all payloads are inert)", show_lines=False)
+    table.add_column("Attack", no_wrap=True)
+    for col in ("Formats", "What it does", "Modelled on"):
+        table.add_column(col)
+    for a in attacks:
+        table.add_row(a.id, ", ".join(a.formats), a.title, a.incident)
+    console.print(table)
+
+
+@app.command("tamper")
+def tamper_cmd(
+    ecosystem: str | None = typer.Argument(None, help="npm or pypi (omit with --file)"),
+    package: str | None = typer.Argument(None, help="Package name"),
+    version: str | None = typer.Argument(None, help="Version (default: latest)"),
+    attack: str | None = typer.Option(None, "--attack", "-a", help="Attack id (default: every attack that fits)"),
+    file: Path | None = typer.Option(None, "--file", exists=True, help="Tamper a local package file instead"),
+    dist: str = typer.Option("auto", "--dist", help="PyPI only: auto, sdist or wheel"),
+    out: Path = typer.Option(Path("wtmt-redteam"), "--out", help="Directory for tampered copies"),
+    list_attacks: bool = typer.Option(False, "--list", help="List the modelled attacks and exit"),
+) -> None:
+    """Make tampered copies of a real release for detection testing (DO NOT INSTALL them)."""
+    import tempfile
+
+    from .redteam import ATTACKS, NotApplicable, applicable_attacks, tamper
+    from .redteam.registry import download_release
+
+    if list_attacks:
+        _attack_table(ATTACKS.values())
+        raise typer.Exit(0)
+    try:
+        with tempfile.TemporaryDirectory(prefix="wtmt-") as tmp:
+            if file is None:
+                if not (ecosystem and package):
+                    err.print("[red]error:[/red] give ECOSYSTEM PACKAGE [VERSION] or --file PATH")
+                    raise typer.Exit(3)
+                _, base, _ = download_release(ecosystem, package, version, dist, Path(tmp), with_previous=False)
+            else:
+                base = file
+            ids = [attack] if attack else [a.id for a in applicable_attacks(base)]
+            for attack_id in ids:
+                result = tamper(base, attack_id, out)
+                console.print(f"[bold]{attack_id}[/bold] -> {result.artifact}  (changed: {', '.join(result.changed_files)})")
+    except KeyError as exc:
+        err.print(f"[red]error:[/red] unknown attack {exc}; see `wtmt tamper --list`")
+        raise typer.Exit(3) from exc
+    except (NotApplicable, RegistryError, UnsafeArchiveError, UnsupportedArchiveError) as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+    console.print("[yellow]These copies are deliberately tampered. Do not install or publish them.[/yellow]")
+
+
+@app.command("redteam")
+def redteam_cmd(
+    ecosystem: str | None = typer.Argument(None, help="npm or pypi (omit with --file)"),
+    package: str | None = typer.Argument(None, help="Package name"),
+    version: str | None = typer.Argument(None, help="Version (default: latest)"),
+    file: Path | None = typer.Option(None, "--file", exists=True, help="Red-team a local package file"),
+    source: str | None = typer.Option(None, "--source", help="With --file: source directory or repository URL"),
+    ref: str | None = typer.Option(None, "--ref", help="With --file: git ref when --source is a URL"),
+    previous_artifact: Path | None = typer.Option(None, "--previous", exists=True,
+                                                  help="With --file: previous release file used as a baseline"),
+    dist: str = typer.Option("auto", "--dist", help="PyPI only: auto, sdist or wheel"),
+    attack: list[str] | None = typer.Option(None, "--attack", "-a", help="Only these attacks (repeatable)"),
+    keep: Path | None = typer.Option(None, "--keep", help="Keep the tampered copies in this directory"),
+    ai: bool = typer.Option(False, "--ai/--no-ai", help="Also ask the model (slow: one pass per attack)."),
+    model: str = ModelOpt, fallback_model: str | None = FallbackOpt, ollama_host: str | None = HostOpt,
+    max_ai: int = MaxAiOpt, json_out: Path | None = JsonOpt, quiet: bool = QuietOpt,
+) -> None:
+    """Attack a real release with every modelled attack and show which ones wtmt catches."""
+    import tempfile
+
+    from rich.table import Table
+
+    from .redteam import run_campaign
+    from .redteam.registry import download_release
+
+    opts = _options(ai, model, fallback_model, ollama_host, max_ai, True, quiet)
+    try:
+        with tempfile.TemporaryDirectory(prefix="wtmt-redteam-") as tmp:
+            work = keep or Path(tmp)
+            if file is not None:
+                result = run_campaign(file, source, workdir=work, ref=ref, previous=previous_artifact,
+                                      attacks=attack, opts=opts)
+            else:
+                if not (ecosystem and package):
+                    err.print("[red]error:[/red] give ECOSYSTEM PACKAGE [VERSION] or --file PATH --source SRC")
+                    raise typer.Exit(3)
+                release, artifact, previous = download_release(ecosystem, package, version, dist, Path(tmp))
+                baseline = analyze_release(ecosystem, package, release.version, dist=dist, opts=opts)
+                if not baseline.source or not baseline.source.commit:
+                    err.print("[red]error:[/red] no source revision found for this release; red-teaming needs one "
+                              "(try `wtmt redteam --file ... --source ...`)")
+                    raise typer.Exit(3)
+                result = run_campaign(artifact, baseline.source.repository, workdir=work,
+                                      ecosystem=get_ecosystem(ecosystem).name, ref=baseline.source.commit,
+                                      previous=previous, attacks=attack, opts=opts, baseline_report=baseline,
+                                      package=release.name, version=release.version)
+    except KeyError as exc:
+        err.print(f"[red]error:[/red] unknown attack {exc}; see `wtmt tamper --list`")
+        raise typer.Exit(3) from exc
+    except (RegistryError, UnsafeArchiveError, UnsupportedArchiveError) as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(3) from exc
+
+    if json_out:
+        import json
+
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(json.dumps(result.to_dict(), indent=2))
+    caught = sum(r.caught for r in result.rows)
+    if not quiet:
+        table = Table(title=f"Red team: {result.package}", show_lines=True)
+        for col in ("Attack", "Modelled on", "Verdict", "Result", "Evidence"):
+            table.add_column(col, overflow="fold")
+        b = result.baseline
+        table.add_row(b.attack, "-", b.verdict, "[green]not flagged[/green]" if result.baseline_ok
+                      else "[red]flagged before tampering[/red]", "\n".join(b.evidence))
+        for r in result.rows:
+            table.add_row(r.attack, r.incident, f"{r.verdict} ({r.risk_score})",
+                          "[green]caught[/green]" if r.caught else "[red]MISSED[/red]", "\n".join(r.evidence))
+        console.print(table)
+    console.print(f"Caught {caught}/{len(result.rows)} attacks ({result.detection_rate:.0%}); "
+                  f"original release: {result.baseline.verdict}")
+    raise typer.Exit(0 if caught == len(result.rows) and result.baseline_ok else 1)
+
+
 @watch_app.command("add")
 def watch_add(ecosystem: str, package: str,
               baseline: str | None = typer.Option(None, help="Treat this version as already reviewed")) -> None:

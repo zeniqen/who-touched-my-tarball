@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-DATASET_VERSION = '0.1.0'
+DATASET_VERSION = '0.2.0'  # bases x modelled attacks (redteam)
 
 _ROOT = Path(__file__).resolve().parents[3]  # repo root
 

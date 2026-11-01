@@ -70,6 +70,13 @@ wtmt check npm ky 1.7.4 --no-ai
 wtmt watch add npm debug
 wtmt watch add pypi requests
 wtmt watch run --interval 3600 --out wtmt-reports
+
+# Launch the WTMT Security Lab web interface
+streamlit run streamlit_app.py
+
+# Launch the comprehensive WTMT web control centre (FastAPI backend + separate frontend)
+pip install -e ".[web]"
+PYTHONPATH=src uvicorn web.backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Useful options:

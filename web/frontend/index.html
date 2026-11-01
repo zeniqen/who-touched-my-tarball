@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WTMT Security Lab</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>WTMT Security Lab</h1>
+    <p>Premium web control centre for WhoTouchedMyTarball: the existing Python engine and CLI remain the source of truth.</p>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <p class="sidebar-label">Workspace</p>
+      <button class="nav-item active" data-tab="dashboard">Dashboard</button>
+      <button class="nav-item" data-tab="package-analysis">Package Analysis</button>
+      <button class="nav-item" data-tab="source-comparison">Source Comparison</button>
+      <button class="nav-item" data-tab="redteam">Red-Team Lab</button>
+      <button class="nav-item" data-tab="build">Reproducible Builds</button>
+      <button class="nav-item" data-tab="provenance">Provenance</button>
+      <button class="nav-item" data-tab="trust">Trust Continuity</button>
+      <button class="nav-item" data-tab="benchmark">Benchmarking</button>
+      <button class="nav-item" data-tab="monitoring">Monitoring</button>
+      <button class="nav-item" data-tab="reports">Reports + History</button>
+      <button class="nav-item" data-tab="console">Advanced Command Builder</button>
+    </aside>
+    <section class="content">
+
+      <div id="dashboard" class="tab active">
+        <h2 class="section-title">Dashboard</h2>
+        <div class="card">
+          <h3>Feature Inventory</h3>
+          <ul id="inventory"></ul>
+        </div>
+        <div class="card">
+          <h3>System Health</h3>
+          <pre class="logs" id="health"></pre>
+        </div>
+        <div class="card">
+          <h3>Recent Jobs</h3>
+          <button class="secondary" onclick="refreshJobs()">Refresh Jobs</button>
+          <div id="jobs-summary"></div>
+        </div>
+      </div>
+
+      <div id="package-analysis" class="tab">
+        <h2 class="section-title">Package Analysis</h2>
+        <div class="card">
+          <form id="form-check">
+            <div class="form-grid">
+              <div><label>Ecosystem</label><select name="ecosystem"><option>npm</option><option>pypi</option></select></div>
+              <div><label>Package</label><input name="package" value="debug" required></div>
+              <div><label>Version (optional)</label><input name="version" placeholder="4.4.1"></div>
+              <div><label>PyPI dist</label><select name="dist"><option value="auto">auto</option><option value="sdist">sdist</option><option value="wheel">wheel</option></select></div>
+              <div><label>Source override (URL/path)</label><input name="source" placeholder="https://github.com/... or local path"></div>
+              <div><label>Git ref</label><input name="ref" placeholder="tag or commit"></div>
+            </div>
+            <details open>
+              <summary>Analysis options</summary>
+              <div class="form-grid">
+                <div><label><input type="checkbox" name="previous" checked> Use previous release baseline</label></div>
+                <div><label><input type="checkbox" name="ai"> Enable AI explanation</label></div>
+                <div><label>Model</label><input name="model" placeholder="beam:cloud"></div>
+                <div><label>Fallback model</label><input name="fallback_model"></div>
+                <div><label>Ollama host</label><input name="ollama_host"></div>
+                <div><label>Max AI findings</label><input name="max_ai" type="number" value="12"></div>
+                <div><label><input type="checkbox" name="show_all"> Show all findings</label></div>
+                <div><label><input type="checkbox" name="md_output"> Save Markdown report</label></div>
+              </div>
+            </details>
+            <button type="submit">Run Package Analysis</button>
+          </form>
+          <div class="result" id="out-check"></div>
+        </div>
+      </div>
+
+      <div id="source-comparison" class="tab">
+        <h2 class="section-title">Source Comparison</h2>
+        <div class="card">
+          <form id="form-diff">
+            <div class="form-grid">
+              <div><label>Artifact file</label><input id="diff_artifact_path" name="artifact" required placeholder="upload below"></div>
+              <div><label>Upload artifact</label><input id="diff_file" type="file"></div>
+              <div><label>Source tree or repository URL</label><input name="source" placeholder="examples/offline-demo/source"></div>
+              <div><label>Ecosystem (optional)</label><select name="ecosystem"><option value="">auto</option><option value="npm">npm</option><option value="pypi">pypi</option></select></div>
+              <div><label>Git ref</label><input name="ref"></div>
+              <div><label>Package name override</label><input name="name"></div>
+              <div><label>Version override</label><input name="version"></div>
+            </div>
+            <details>
+              <summary>Advanced options</summary>
+              <div class="form-grid">
+                <div><label>Previous artifact</label><input id="diff_previous_path" name="previous_artifact"></div>
+                <div><label>Upload previous artifact</label><input id="diff_previous_file" type="file"></div>
+                <div><label><input type="checkbox" name="ai"> Enable AI</label></div>
+                <div><label>Model</label><input name="model"></div>
+                <div><label>Fallback model</label><input name="fallback_model"></div>
+                <div><label>Ollama host</label><input name="ollama_host"></div>
+                <div><label>Max AI findings</label><input name="max_ai" type="number" value="12"></div>
+                <div><label><input type="checkbox" name="show_all"> Show all findings</label></div>
+                <div><label><input type="checkbox" name="md_output"> Save Markdown report</label></div>
+              </div>
+            </details>
+            <button type="submit">Compare Package with Source</button>
+          </form>
+          <div class="result" id="out-diff"></div>
+        </div>
+      </div>
+
+      <div id="redteam" class="tab">
+        <h2 class="section-title">Red-Team Lab</h2>
+        <div class="card">
+          <p class="muted">All attacks are modelled on real incidents, but every payload is inert: TEST-NET addresses, <code>.invalid</code> domains, and harmless print output.</p>
+          <form id="form-redteam">
+            <div class="form-grid">
+              <div><label>Base artifact or use demo fixture</label><input id="rt_base_path" name="file" value="examples/offline-demo/clean.tgz"></div>
+              <div><label>Upload base artifact</label><input id="rt_file" type="file"></div>
+              <div><label>Source tree or repository URL</label><input name="source" value="examples/offline-demo/source"></div>
+              <div><label>Attack</label><select id="rt_attack" name="attack"></select></div>
+            </div>
+            <details open>
+              <summary>Detection options</summary>
+              <div class="form-grid">
+                <div><label>Run selected attack only</label><select name="single"><option value="yes">Yes</option><option value="no">All applicable attacks</option></select></div>
+                <div><label><input type="checkbox" name="ai"> Enable AI explanation in matrix</label></div>
+                <div><label><input type="checkbox" name="md_output"> Save Markdown reports</label></div>
+                <div><label>Git ref</label><input name="ref"></div>
+              </div>
+            </details>
+            <div class="grid">
+              <button type="submit" data-mode="tamper">Generate Tampered Copies</button>
+              <button type="button" class="warn" onclick="runRedTeam()">Run Full Detection Matrix</button>
+            </div>
+          </form>
+          <div class="result" id="out-redteam"></div>
+        </div>
+      </div>
+
+      <div id="build" class="tab">
+        <h2 class="section-title">Reproducible Builds</h2>
+        <div class="card">
+          <form id="form-build">
+            <div class="form-grid">
+              <div><label>Ecosystem</label><select name="ecosystem"><option>npm</option><option>pypi</option></select></div>
+              <div><label>Spec</label><input name="spec" placeholder="demo@1.0.0 or demo==1.0.0" required></div>
+              <div><label>Source override</label><input name="source"></div>
+              <div><label>Git ref</label><input name="ref"></div>
+              <div><label>Network policy</label><select name="network_policy"><option>none</option><option>limited</option><option>full</option></select></div>
+              <div><label>Timeout (seconds)</label><input name="timeout" type="number" value="600"></div>
+              <div><label>Memory limit (MB)</label><input name="memory_limit" type="number" value="2048"></div>
+              <div><label>CPU limit</label><input name="cpu_limit" type="number" step="0.1" value="2.0"></div>
+            </div>
+            <details>
+              <summary>Build options</summary>
+              <div class="form-grid">
+                <div><label><input type="checkbox" name="keep_build_artifacts"> Keep rebuilt artifacts</label></div>
+                <div><label><input type="checkbox" name="verbose" checked> Verbose output</label></div>
+              </div>
+            </details>
+            <button type="submit">Verify Reproducible Build</button>
+          </form>
+          <div class="result" id="out-build"></div>
+        </div>
+      </div>
+
+      <div id="provenance" class="tab">
+        <h2 class="section-title">Provenance Verification</h2>
+        <div class="card">
+          <form id="form-provenance">
+            <div class="form-grid">
+              <div><label>Ecosystem</label><select name="ecosystem"><option>npm</option><option>pypi</option></select></div>
+              <div><label>Spec</label><input name="spec" placeholder="debug@4.4.1 or requests==2.32.3" required></div>
+              <div><label>Expected repository</label><input name="expected_repository"></div>
+              <div><label>Expected commit</label><input name="expected_commit"></div>
+              <div><label>Expected workflow</label><input name="expected_workflow"></div>
+            </div>
+            <details>
+              <summary>Verification options</summary>
+              <div class="form-grid">
+                <div><label><input type="checkbox" name="json_out"> Print JSON</label></div>
+                <div><label><input type="checkbox" name="verbose" checked> Verbose</label></div>
+                <div><label><input type="checkbox" name="no_cache"> Disable cache</label></div>
+                <div><label><input type="checkbox" name="strict"> Strict mode</label></div>
+              </div>
+            </details>
+            <button type="submit">Verify Provenance</button>
+          </form>
+          <div class="result" id="out-provenance"></div>
+        </div>
+      </div>
+
+      <div id="trust" class="tab">
+        <h2 class="section-title">Trust Continuity</h2>
+        <div class="card">
+          <form id="form-trust">
+            <div class="form-grid">
+              <div><label>Ecosystem</label><select name="ecosystem"><option>npm</option><option>pypi</option></select></div>
+              <div><label>Package</label><input name="package" value="debug" required></div>
+              <div><label>Change ID (for actions)</label><input name="change_id" type="number"></div>
+            </div>
+            <div class="grid">
+              <button type="button" onclick="runTrust('trust-show')">Show Baseline</button>
+              <button type="button" onclick="runTrust('trust-history')">Baseline History</button>
+              <button type="button" onclick="runTrust('trust-changes')">Trust Changes</button>
+              <button type="button" onclick="runTrust('trust-baseline')">List Baselines</button>
+              <button type="button" class="secondary" onclick="runTrustAction('trust-approve')">Approve Change</button>
+              <button type="button" class="warn" onclick="runTrustAction('trust-reject')">Reject Change</button>
+              <button type="button" class="secondary" onclick="runTrustAction('trust-acknowledge')">Acknowledge Change</button>
+            </div>
+          </form>
+          <div class="result" id="out-trust"></div>
+        </div>
+      </div>
+
+      <div id="monitoring" class="tab">
+        <h2 class="section-title">Monitoring</h2>
+        <div class="card">
+          <form id="form-monitor">
+            <h3>Add package</h3>
+            <div class="form-grid">
+              <div><label>Ecosystem</label><select name="ecosystem"><option>npm</option><option>pypi</option></select></div>
+              <div><label>Package</label><input name="package" value="debug"></div>
+              <div><label>Baseline version</label><input name="baseline"></div>
+            </div>
+            <div class="grid">
+              <button type="button" onclick="submitMonitor('watch-add')">Add</button>
+              <button type="button" class="warn" onclick="submitMonitor('watch-remove')">Remove</button>
+              <button type="button" class="secondary" onclick="submitMonitor('watch-list')">List Watched</button>
+            </div>
+          </form>
+          <hr>
+          <form id="form-monitor-run">
+            <h3>Run monitored checks</h3>
+            <div class="form-grid">
+              <div><label>Report output directory</label><input name="out_dir" value="wtmt-reports"></div>
+              <div><label>Interval (0 = once)</label><input name="interval" type="number" value="0"></div>
+              <div><label><input type="checkbox" name="ai"> Enable AI</label></div>
+            </div>
+            <button type="submit">Run Monitoring</button>
+          </form>
+          <div class="result" id="out-monitor"></div>
+        </div>
+      </div>
+
+      <div id="benchmark" class="tab">
+        <h2 class="section-title">Detection Benchmarking</h2>
+        <div class="card">
+          <form id="form-benchmark-run">
+            <div class="form-grid">
+              <div><label>Scenario ID (optional)</label><input name="scenario"></div>
+            </div>
+            <button type="submit">Run Benchmark</button>
+          </form>
+          <hr>
+          <div class="grid">
+            <button class="secondary" onclick="runSimple('benchmark-list', {}, 'out-benchmark')">List Benchmark Scenarios</button>
+            <button class="secondary" onclick="listJobs()">Refresh Jobs</button>
+          </div>
+          <form id="form-benchmark-compare">
+            <div class="form-grid">
+              <div><label>Baseline run ID</label><input name="baseline" required></div>
+              <div><label>Current run ID</label><input name="current" required></div>
+            </div>
+            <button type="submit">Compare Runs</button>
+          </form>
+          <div class="result" id="out-benchmark"></div>
+        </div>
+      </div>
+
+      <div id="reports" class="tab">
+        <h2 class="section-title">Reports and History</h2>
+        <div class="card">
+          <button onclick="refreshJobs()">Refresh Jobs and Outputs</button>
+          <div id="jobs-table"></div>
+        </div>
+      </div>
+
+      <div id="console" class="tab">
+        <h2 class="section-title">Advanced Command Builder</h2>
+        <div class="card">
+          <form id="form-advanced">
+            <div class="form-grid">
+              <div><label>Operation</label>
+                <select id="adv-kind" name="kind"></select>
+              </div>
+            </div>
+            <label>Parameters as JSON</label>
+            <textarea name="params" rows="12" placeholder='{"ecosystem":"npm","package":"debug"}'></textarea>
+            <button type="submit">Run Supported Operation</button>
+          </form>
+          <div class="result" id="out-console"></div>
+          <p class="muted">Only allowlisted operations are accepted. Free-form shell commands are not supported.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
